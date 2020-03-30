@@ -1,0 +1,51 @@
+<html>
+  <head>
+    <title>Engine test</title>
+  </head>
+  <style>
+    html,
+    body {
+      min-height: 100%;
+      margin: 0;
+      padding: 0;
+    }
+  </style>
+  <body>
+    <script src="./iso-engine/core/utilities.js"></script>
+    <script src="./iso-engine/core/Vector2.js"></script>
+    <script src="./iso-engine/core/Vector3.js"></script>
+    <script src="./iso-engine/core/Raycast.js"></script>
+    <script src="./iso-engine/core/actor/Actor.js"></script>
+    <script src="./iso-engine/core/actor/ActorObject.js"></script>
+    <script src="./iso-engine/core/Engine.js"></script>
+    <script src="./iso-engine/Terrain.js"></script>
+    <script src="./iso-engine/ObserverPointMover.js"></script>
+    <script>
+      document.addEventListener('DOMContentLoaded', function() {
+        Engine.setup(document.body).start();
+        //Engine.setDebug(true);
+
+        const terrain = new Terrain();
+        Engine.addActor(terrain);
+
+        terrain.map = [
+          [0, 0, 0, 0, 0],
+          [0, 1, 1, 1, 0],
+          [0, 1, 10, 1, 0],
+          [0, 1, 1, 1, 0],
+          [0, 0, 0, 0, 0]
+        ];
+
+        const observerPointMover = new ObserverPointMover();
+        observerPointMover.setTerrain(terrain);
+
+        // Client.connect().setAfterMapLoad(m => {
+        //   terrain.map = m;
+
+        //   const observerPointMover = new ObserverPointMover();
+        //   observerPointMover.setTerrain(terrain);
+        // });
+      });
+    </script>
+  </body>
+</html>
