@@ -1,46 +1,100 @@
 window.Viewport = (function() {
   // Unit of the world correspond to TOT px of the canvas viewport at zoomLevel 1
-  const baseUnit = new Vector3(80, 40, 40);
+  const baseUnit = Vector3(80, 40, 40);
 
   // Unit of the world
   const unit = baseUnit.clone();
 
   // Size of the viewport in PX
-  const size = Vector2.zero;
-
-  // Margin of the Viewport from start rendering in PX
-  const renderingOffset = new Vector2(0, 0);
+  const size = Vector2();
 
   // The observing point of the world that correspondes to the center of canvas
   // It will be setted on canvas' resize
-  const origin = Vector2.zero;
+  const origin = Vector2();
 
   // Bounds of rendering on the viewport
   const bounds = [];
 
-  let zoom = 1;
+  // How much after last zoom event for calling zoom-end ?
+  const zoomEndTimeoutMilliseconds = 500;
+
+  let zoom = 1,
+    zoomEndTimeout = null,
+    zoomEndValue = 1;
+
+  // Min and max for zoom
+  const zoomLimits = [0.5, 2];
 
   /**
    * Set zoom for viewport
    * @param level {Number}
    */
   function setZoom(level) {
+    // Zoom start
+    if (zoom == zoomEndValue) Viewport.invoke('zoom-start');
+
     zoom = level;
     unit.copy(baseUnit.multiply(level));
+
+    // Invoke zoom changed event
+    Viewport.invoke('zoom', zoom);
+
+    if (zoomEndTimeout) clearTimeout(zoomEndTimeout);
+    zoomEndTimeout = setTimeout(() => {
+      zoomEndValue = level;
+      // If for 100 milliseconds no zoom is done, then invoke the event
+      // Recalculations on sprite must be executed here
+      Viewport.invoke('zoom-end');
+    }, zoomEndTimeoutMilliseconds);
   }
 
   function getZoom() {
     return zoom;
   }
 
+  /**
+   * Viewport's events
+   */
+  const events = {
+    'zoom-start': [],
+    'zoom-end': [],
+    zoom: []
+  };
+
+  /**
+   * Add callback for viewport event
+   * @param {String} event
+   * @param {Function} callback
+   */
+  function on(event, callback) {
+    events[event].push(callback);
+  }
+
+  /**
+   * Remove callback for viewport event
+   * @param {String} event
+   * @param {Function} callback
+   */
+  function off(event, callback) {
+    const index = events[event].indexOf(callback);
+    if (index > -1) events[event].splice(index, 1);
+  }
+
+  function invoke(event, ...args) {
+    for (let callback of events[event]) callback(...args);
+  }
+
   return {
     unit,
     size,
-    renderingOffset,
     origin,
     bounds,
     setZoom,
-    getZoom
+    getZoom,
+    zoomLimits,
+    on,
+    off,
+    invoke
   };
 })();
 
@@ -48,252 +102,199 @@ window.Engine = (function() {
   let debug = false;
 
   /**
-   * @type {CanvasRenderingContext2D}
+   * @type {PIXI.Application}
    */
-  let canvasContext = null;
-  let canvas = null;
+  let app = null;
 
   // All renderizable entities of the world
-  let actors = [];
+  const actors = [],
+    actorsObjects = [];
 
   // The point from which the observer is watching the world
-  const observerPoint = Vector3.zero;
+  const observerPoint = Vector3();
+
+  /**
+   * Measure a size on viewport knowing the length on 3d Z axis and return the size in the 3d world
+   * @param {Vector2} size
+   * @param {Number} z
+   * @returns {Vector3}
+   */
+  function measureViewportToWorld(size, z) {
+    return Vector3(
+      size.x / Viewport.unit.x + (size.y + Viewport.unit.z * z) / Viewport.unit.y,
+      size.x / Viewport.unit.x - (size.y + Viewport.unit.z * z) / Viewport.unit.y,
+      z
+    );
+  }
+
+  /**
+   * Measure a size in the 3d world and return the size on viewport
+   * @param {Vector3} size
+   * @returns {Vector2}
+   */
+  function measureWorldToViewport(size) {
+    return new Vector2(
+      (Viewport.unit.x / 2) * (size.y + size.x),
+      (Viewport.unit.y / 2) * (size.y - size.x) - Viewport.unit.z * size.z
+    );
+  }
 
   /**
    * Convert world's point to a viewport point
    * @param {Vector3} point
    * @returns {Vector2}
    */
-  function worldPointToViewportPoint(point) {
-    point = point.sum(observerPoint.multiply(-1));
+  function worldToViewport(point) {
+    // This is the same code:
+    // point = point.add(observerPoint.multiply(-1));
 
-    return (
-      Viewport.origin
-        // + Y Unit Vector * point.y
-        .sum(
-          new Vector2(Viewport.unit.x / 2, -Viewport.unit.y / 2).multiply(
-            point.y
-          )
-        )
-        // + X Unit Vector * point.x
-        .sum(
-          new Vector2(Viewport.unit.x / 2, Viewport.unit.y / 2).multiply(
-            point.x
-          )
-        )
-        // + Z Unit Vector * point.z
-        .sum(new Vector2(0, -Viewport.unit.z).multiply(point.z))
+    // return (
+    //   Viewport.origin
+    //     // + Y Unit Vector * point.y
+    //     .add(new Vector2(Viewport.unit.x / 2, -Viewport.unit.y / 2).multiply(point.y))
+    //     // + X Unit Vector * point.x
+    //     .add(new Vector2(Viewport.unit.x / 2, Viewport.unit.y / 2).multiply(point.x))
+    //     // + Z Unit Vector * point.z
+    //     .add(new Vector2(0, -Viewport.unit.z).multiply(point.z))
+    // );
+
+    // But in this way, is faster (less calculations):
+    const pointY = point.x - observerPoint.x;
+    const pointX = point.y - observerPoint.y;
+    const pointZ = point.z - observerPoint.z;
+
+    return new Vector2(
+      Viewport.origin.x + (Viewport.unit.x / 2) * (pointY + pointX),
+      Viewport.origin.y + (Viewport.unit.y / 2) * (pointY - pointX) - Viewport.unit.z * pointZ
     );
-  }
-
-  /**
-   * Draw an empty tile
-   * For debug
-   * @param {Vector3} position
-   */
-  function drawEmptyTile(position, color) {
-    // Draw line to halfs of the bounding rect
-    canvasContext.beginPath();
-
-    position = position.sum([-0.5, -0.5, 0]);
-
-    const first = worldPointToViewportPoint(position).let(({ x, y }) =>
-      canvasContext.moveTo(x, y)
-    );
-
-    worldPointToViewportPoint(position.sum([0, 1, 0])).let(({ x, y }) =>
-      canvasContext.lineTo(x, y)
-    );
-
-    worldPointToViewportPoint(position.sum([1, 1, 0])).let(({ x, y }) =>
-      canvasContext.lineTo(x, y)
-    );
-
-    worldPointToViewportPoint(position.sum([1, 0, 0])).let(({ x, y }) =>
-      canvasContext.lineTo(x, y)
-    );
-
-    canvasContext.lineTo(first.x, first.y);
-    canvasContext.strokeStyle = color || "rgba(0,0,0,0.5)";
-    canvasContext.stroke();
-
-    canvasContext.fillStyle = color || "rgba(0,0,0,0.5)";
-    worldPointToViewportPoint(position.sum([0.5, 0.25, 0])).let(({ x, y }) =>
-      canvasContext.fillText(`${position.x + 0.5}, ${position.y + 0.5}`, x, y)
-    );
-  }
-
-  /**
-   * Draw grid at z = 0 level
-   * For debug
-   */
-  function drawGrid() {
-    const [upLeft, upRight, downLeft, downRight] = Viewport.bounds.map(bound =>
-      bound.worldPointAtZ(0)
-    );
-
-    upLeft.let(b => {
-      b.x = Math.floor(b.x);
-      b.y = Math.floor(b.y);
-      drawEmptyTile(b, "red");
-    });
-    upRight.let(b => {
-      b.x = Math.ceil(b.x);
-      b.y = Math.ceil(b.y);
-      drawEmptyTile(b, "red");
-    });
-    downLeft.let(b => {
-      b.x = Math.floor(b.x);
-      b.y = Math.floor(b.y);
-      drawEmptyTile(b, "red");
-    });
-    downRight.let(b => {
-      b.x = Math.ceil(b.x);
-      b.y = Math.ceil(b.y);
-      drawEmptyTile(b, "red");
-    });
-
-    let x0 = upLeft.x - 1;
-    let y0 = upLeft.y;
-    let x1 = upRight.x + 1;
-    let y1 = upRight.y;
-
-    let x = x0;
-    let y = y0;
-
-    while (x0 < downLeft.x - 1) {
-      x0 += 1;
-      x1 -= 1;
-
-      x = x0;
-      y = y0;
-
-      while (x <= x1 || y <= y1) {
-        drawEmptyTile(new Vector3(x, y, 0));
-        x++;
-        y++;
-      }
-
-      y0 -= 1;
-
-      x = x0 + 1;
-      y = y0 + 1;
-
-      while (x < x1 || y < y1) {
-        drawEmptyTile(new Vector3(x, y, 0));
-        x++;
-        y++;
-      }
-
-      y1 -= 1;
-    }
-
-    x0 += 1;
-    x1 -= 1;
-
-    x = x0;
-    y = y0;
-
-    while (x <= x1 || y <= y1) {
-      drawEmptyTile(new Vector3(x, y, 0));
-      x++;
-      y++;
-    }
   }
 
   let lastTime = 0;
+
   /**
-   * This function draw the world
+   * This function update the world
    * @param {Number} time
    */
-  function render(time) {
-    // This is difference in ms between frames rendering
-    const deltaTime = time - lastTime;
-    lastTime = time;
+  function update(deltaTime) {
+    for (let actor of actors) actor.update(deltaTime);
 
-    // Clear the canvas
-    canvasContext.clearRect(0, 0, Viewport.size.x, Viewport.size.y);
-
-    if (debug)
-      // Draw grid for test purpouse
-      drawGrid();
-
-    for (let actor of actors) {
-      actor.update(time, deltaTime);
-      if (actor.isVisible()) actor.render(canvasContext);
+    let count = 0,
+      visibleCount = 0;
+    for (let actor of actorsObjects) {
+      count++;
+      actor.update(deltaTime);
+      actor.entity.visible = actor.isVisible();
+      //actor.entity.zIndex = actor.zIndex();
+      if (actor.entity.visible) {
+        visibleCount++;
+        // Update entity position (the viewport has been translated or zoomed?)
+        actor.entity.position.set(actor.viewportPosition.x, actor.viewportPosition.y);
+      }
     }
 
-    requestAnimationFrame(render);
+    document.getElementById('label').textContent = `${visibleCount}/${count}`;
   }
 
   /**
    * On Element resize, adapt canvas and viewport
    * @param {Element} element
    */
-  function onCanvasResize(element) {
+  function onResize(element) {
+    const w = element.clientWidth;
+    const h = element.clientHeight;
+
+    app.view.style.width = w + 'px';
+    app.view.style.height = h + 'px';
+    app.view.width = w;
+    app.view.height = h;
+
+    app.renderer.resize(w, h);
+
     // on window resize, the element size can change
-    canvas.style.width = element.clientWidth;
-    canvas.style.height = element.clientHeight;
+    Viewport.size.x = w;
+    Viewport.size.y = h;
 
-    canvas.width = element.clientWidth;
-    canvas.height = element.clientHeight;
-
-    Viewport.size.x = canvas.width;
-    Viewport.size.y = canvas.height;
-
-    Viewport.origin.x = element.clientWidth / 2;
-    Viewport.origin.y = element.clientHeight / 2;
+    Viewport.origin.x = w / 2;
+    Viewport.origin.y = h / 2;
 
     // up left
-    Viewport.bounds[0] = new Raycast(
-      new Vector2(Viewport.renderingOffset.x, Viewport.renderingOffset.y)
-    );
+    Viewport.bounds[0] = new Raycast(new Vector2(0, 0));
 
     // up right
-    Viewport.bounds[1] = new Raycast(
-      new Vector2(
-        Viewport.size.x - Viewport.renderingOffset.x,
-        Viewport.renderingOffset.y
-      )
-    );
+    Viewport.bounds[1] = new Raycast(new Vector2(w, 0));
 
     // down left
-    Viewport.bounds[2] = new Raycast(
-      new Vector2(
-        Viewport.renderingOffset.x,
-        Viewport.size.y - Viewport.renderingOffset.y
-      )
-    );
+    Viewport.bounds[2] = new Raycast(new Vector2(0, h));
 
     // down rights
-    Viewport.bounds[3] = new Raycast(
-      new Vector2(
-        Viewport.size.x - Viewport.renderingOffset.x,
-        Viewport.size.y - Viewport.renderingOffset.y
-      )
-    );
+    Viewport.bounds[3] = new Raycast(new Vector2(w, h));
   }
 
   /**
    * Element to which append the engine's canvas
    * @param {Element} element
    */
-  function createCanvas(element) {
-    canvas = document.createElement("canvas");
-    canvas.style.position = "absolute";
-    canvas.style.top = 0;
-    canvas.style.left = 0;
+  function createApp(element) {
+    //Create a Pixi Application
+    app = new PIXI.Application();
+    app.renderer.autoResize = true;
 
-    onCanvasResize(element);
-    window.addEventListener("resize", onCanvasResize.bind(this, element));
+    onResize(element);
+    window.addEventListener('resize', onResize.bind(this, element));
 
-    element.appendChild(canvas);
-    canvasContext = canvas.getContext("2d");
+    element.appendChild(app.view);
 
-    element.addEventListener("click", function({ clientX, clientY }) {
-      console.log(clientX, clientY);
-      console.log(new Raycast(new Vector2(clientX, clientY)).worldPointAtZ(0));
+    app.view.addEventListener('click', function({ clientX, clientY }) {
+      function getPosition(el) {
+        var xPosition = 0;
+        var yPosition = 0;
+
+        while (el) {
+          if (el.tagName == 'BODY') {
+            // deal with browser quirks with body/window/document and page scroll
+            var xScrollPos = el.scrollLeft || document.documentElement.scrollLeft;
+            var yScrollPos = el.scrollTop || document.documentElement.scrollTop;
+
+            xPosition += el.offsetLeft - xScrollPos + el.clientLeft;
+            yPosition += el.offsetTop - yScrollPos + el.clientTop;
+          } else {
+            xPosition += el.offsetLeft - el.scrollLeft + el.clientLeft;
+            yPosition += el.offsetTop - el.scrollTop + el.clientTop;
+          }
+
+          el = el.offsetParent;
+        }
+        return {
+          x: xPosition,
+          y: yPosition
+        };
+      }
+
+      console.log(clientX - getPosition(element).x, clientY - getPosition(element).y);
+      console.log(
+        new Raycast(
+          new Vector2(clientX - getPosition(element).x, clientY - getPosition(element).y)
+        ).worldPointAtZ(0)
+      );
     });
+
+    /**
+     * Zoom control variables
+     */
+    const zoom = {
+      lastOnEnd: 1,
+      endTimeout: null
+    };
+
+    /**
+     * Handle viewport's zoom
+     */
+    d3.select(app.view).call(
+      d3
+        .zoom()
+        .scaleExtent(Viewport.zoomLimits)
+        .on('zoom', () => Viewport.setZoom(d3.event.transform.k))
+    );
   }
 
   /**
@@ -302,7 +303,7 @@ window.Engine = (function() {
    * @returns {Engine}
    */
   function setup(element) {
-    createCanvas(element);
+    createApp(element);
 
     return this;
   }
@@ -311,22 +312,61 @@ window.Engine = (function() {
    * Make the engine start rendering the world
    */
   function start(element) {
-    render(0);
+    app.ticker.add(update);
   }
 
+  /**
+   * @param {Actor} actor
+   */
   function addActor(actor) {
     actors.push(actor);
   }
 
+  /**
+   * This will be handled in a different way than Actor (has position and visibility)
+   * @param {ActorObject} actor
+   */
+  function addActorObject(actor) {
+    actorsObjects.push(actor);
+    app.stage.addChild(actor.entity);
+  }
+
+  /**
+   * @param {Actor} actor
+   */
+  function removeActor(actor) {
+    const index = actors.indexOf(actor);
+    if (index > -1) actors.splice(index, 1);
+  }
+
+  /**
+   * @param {Actor} actor
+   */
+  function removeActorObject(actor) {
+    const index = actorsObjects.indexOf(actor);
+    app.stage.removeChild(actor.entity);
+    if (index > -1) actorsObjects.splice(index, 1);
+  }
+
   return {
+    getApp: () => app,
     setDebug: v => {
       debug = v;
+
+      if (v) DebugGrid.addGrid();
+      else DebugGrid.removeGrid();
     },
+    getDebug: v => debug,
 
     observerPoint,
-    worldPointToViewportPoint,
+    measureViewportToWorld,
+    measureWorldToViewport,
+    worldToViewport,
     setup,
     start,
-    addActor
+    addActor,
+    addActorObject,
+    removeActor,
+    removeActorObject
   };
 })();

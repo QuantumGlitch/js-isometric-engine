@@ -17,15 +17,14 @@ window.Raycast = class Raycast {
    * @returns {Vector3}
    */
   worldPointAtZ(z) {
-    return new Vector3(
+    return Vector3(
+      (this.viewportPoint.x - Viewport.origin.x) / Viewport.unit.x +
+        (-Viewport.origin.y + this.viewportPoint.y + Viewport.unit.z * z) / Viewport.unit.y +
+        Engine.observerPoint.x,
       (this.viewportPoint.x - Viewport.origin.x) / Viewport.unit.x -
-        (Viewport.origin.y - z * Viewport.unit.z - this.viewportPoint.y) /
-          Viewport.unit.y,
-      (Viewport.origin.y - z * Viewport.unit.z - this.viewportPoint.y) /
-        Viewport.unit.y +
-        (this.viewportPoint.x - Viewport.origin.x) / Viewport.unit.x,
-      z
-    ).sum(Engine.observerPoint.multiply(1));
+        (-Viewport.origin.y + this.viewportPoint.y + Viewport.unit.z * z) / Viewport.unit.y +
+        Engine.observerPoint.y,
+      z + Engine.observerPoint.z
+    );
   }
 };
-

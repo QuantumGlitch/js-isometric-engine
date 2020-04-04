@@ -1,7 +1,15 @@
-// Scope function
-Object.defineProperty(Object.prototype, 'let', {
-    value: function(...functions) {
-      functions.forEach(fn => fn(this));
-      return this;
-    }
-  });
+Math.clamp = function(value, min, max) {
+  if (value < min) {
+    return min;
+  } else if (value > max) {
+    return max;
+  }
+
+  return value;
+};
+
+Math.lerp = function(value1, value2, amount) {
+  amount = amount < 0 ? 0 : amount;
+  amount = amount > 1 ? 1 : amount;
+  return value1 + (value2 - value1) * amount;
+};
