@@ -189,3 +189,5 @@ Vector3.fromArray = function(a) {
 Vector3.angleBetween = function(a, b) {
   return a.angleTo(b);
 };
+
+module.exports = Vector3;

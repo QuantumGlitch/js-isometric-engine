@@ -1,4 +1,12 @@
-window.TerrainGenerator = class TerrainGenerator {
+const PIXI = require('pixi.js');
+
+const { Engine, Viewport } = require('../core/Engine');
+const Vector3 = require('../core/Vector3');
+const Vector2 = require('../core/Vector2');
+
+const ActorObject = require('../core/actor/ActorObject');
+
+class TerrainGenerator {
   constructor() {
     this.texturesMap = [];
     this.alignMap = [];
@@ -282,16 +290,16 @@ window.TerrainGenerator = class TerrainGenerator {
         canvasContext.beginPath();
 
         // From center
-        canvasContext.moveTo(p0.x - xMinViewport, p0.y - yMinViewport);
+        canvasContext.moveTo(Math.round(p0.x - xMinViewport), Math.round(p0.y - yMinViewport));
 
         // To every point of triangle
         for (let point of triangle.points) {
           const p = Engine.measureWorldToViewport(point);
-          canvasContext.lineTo(p.x - xMinViewport, p.y - yMinViewport);
+          canvasContext.lineTo(Math.round(p.x - xMinViewport), Math.round(p.y - yMinViewport));
         }
 
         // Back to center
-        canvasContext.lineTo(p0.x - xMinViewport, p0.y - yMinViewport);
+        canvasContext.lineTo(Math.round(p0.x - xMinViewport), Math.round(p0.y - yMinViewport));
 
         canvasContext.fillStyle = this.getTileColor(triangle.lightSimilarity);
         canvasContext.fill();
@@ -321,8 +329,39 @@ window.TerrainGenerator = class TerrainGenerator {
     }
 
     // Return texture from Canvas
-    tilePrecomputation.texture = new PIXI.Texture(new PIXI.BaseTexture.fromCanvas(canvas));
+    tilePrecomputation.texture = new PIXI.Texture(PIXI.BaseTexture.from(canvas));
     if (tilePrecomputation.texture) return returnActorObjectConfiguration();
+  }
+
+  // Callbacks for tiles
+  onZoom(zoom) {
+    // Just set scale as approximation, until redraw
+    this.entity.scale.set(zoom / this.lastZoomComputed);
+  }
+
+  onZoomEnd(x, y) {
+    const tileObject = this._tilesObjects[x][y];
+
+    const distance = Math.sqrt(
+      Math.pow(Engine.observerPoint.x - tileObject.position.x, 2) +
+        Math.pow(Engine.observerPoint.y - tileObject.position.y, 2) +
+        Math.pow(Engine.observerPoint.z - tileObject.position.z, 2)
+    );
+
+    // Compute distance from observerPoint
+    this.refreshTimeouts.push(
+      setTimeout(this.refreshTimeout.bind(this, this.refreshTimeouts.length, x, y), distance * 20)
+    );
+  }
+
+  refreshTimeout(timeoutIndex, x, y) {
+    this.setOrRefreshActorObjectTile(x, y);
+    this.refreshTimeouts.splice(timeoutIndex, 1);
+    if (this.refreshTimeouts.length == 0) {
+      // free memory
+      delete this.texturesMap;
+      this.texturesMap = [];
+    }
   }
 
   /**
@@ -350,41 +389,8 @@ window.TerrainGenerator = class TerrainGenerator {
       tileObject.entity.visible = false;
       tileObject.entity.interactive = true;
 
-      tileObject.entity.on('mousedown', function() {
-        console.log('tile clicked', x, y);
-      });
-
-      // Handle zoom for this tile
-      const onZoom = zoom => {
-        // Just set scale as approximation, until redraw
-        tileObject.entity.scale.set(zoom / tileObject.lastZoomComputed);
-      };
-
-      Viewport.on('zoom', onZoom);
-
-      // Handle zoom-end for this tile
-      const onZoomEnd = () => {
-        const distance = Math.sqrt(
-          Math.pow(Engine.observerPoint.x - tileObject.position.x, 2) +
-            Math.pow(Engine.observerPoint.y - tileObject.position.y, 2) +
-            Math.pow(Engine.observerPoint.z - tileObject.position.z, 2)
-        );
-        // Compute distance from observerPoint
-        const timeoutIndex =
-          this.refreshTimeouts.push(
-            setTimeout(() => {
-              this.setOrRefreshActorObjectTile(x, y);
-              this.refreshTimeouts.splice(timeoutIndex, 1);
-              if (this.refreshTimeouts.length == 0) {
-                // free memory
-                delete this.texturesMap;
-                this.texturesMap = [];
-              }
-            }, distance * 20)
-          ) - 1;
-      };
-
-      Viewport.on('zoom-end', onZoomEnd);
+      Viewport.on('zoom', this.onZoom.bind(tileObject));
+      Viewport.on('zoom-end', this.onZoomEnd.bind(this, x, y));
 
       // Add to engine
       Engine.addActorObject(tileObject);
@@ -415,4 +421,6 @@ window.TerrainGenerator = class TerrainGenerator {
       for (let y = 0; y < this._map[0].length; y++)
         Engine.removeActorObject(this._tilesObjects[x][y]);
   }
-};
+}
+
+module.exports = TerrainGenerator;

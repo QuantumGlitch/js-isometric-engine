@@ -1,4 +1,10 @@
-window.ActorObject = class ActorObject extends Actor {
+const PIXI = require('pixi.js');
+
+const { Engine, Viewport } = require('../Engine');
+const Vector3 = require('../Vector3');
+const Actor = require('./Actor');
+
+class ActorObject extends Actor {
   /**
    * @param {Vector3} {position
    * @param {Vector3} bounds
@@ -68,4 +74,6 @@ window.ActorObject = class ActorObject extends Actor {
   zIndex() {
     return this.position.x + this.position.y + this.position.z;
   }
-};
+}
+
+module.exports = ActorObject;

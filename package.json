@@ -1,0 +1,23 @@
+{
+  "name": "iso-engine",
+  "version": "1.0.0",
+  "description": "Just another javascript isometric engine on 2D Canvas",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/QuantumGlitch/js-isometric-engine.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/QuantumGlitch/js-isometric-engine/issues"
+  },
+  "homepage": "https://github.com/QuantumGlitch/js-isometric-engine#readme",
+  "dependencies": {
+    "d3": "^5.15.1",
+    "pixi.js": "^5.2.1"
+  }
+}

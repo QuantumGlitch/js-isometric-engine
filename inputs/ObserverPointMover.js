@@ -1,4 +1,7 @@
-window.ObserverPointMover = function() {
+const { Engine, Viewport } = require('../core/Engine');
+const Vector3 = require('../core/Vector3');
+
+module.exports = function() {
   const mousePos = [];
   const triggerMargins = [100, 100];
 

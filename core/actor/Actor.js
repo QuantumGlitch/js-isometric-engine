@@ -1,4 +1,4 @@
-window.Actor = class Actor {
+class Actor {
   constructor() {}
 
   /**
@@ -7,3 +7,5 @@ window.Actor = class Actor {
    */
   update(deltaTime) {}
 };
+
+module.exports = Actor;

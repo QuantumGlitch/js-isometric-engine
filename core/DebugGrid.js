@@ -1,4 +1,10 @@
-window.DebugGrid = (function() {
+const PIXI = require('pixi.js');
+
+const { Engine, Viewport } = require('./Engine');
+const Raycast = require('./Raycast');
+const Vector3 = require('./Vector3');
+
+const DebugGrid = (function() {
   let grid = null;
   let tileTexture = null;
 
@@ -81,9 +87,9 @@ window.DebugGrid = (function() {
     line.y = 0;
     grid.addChild(line);
 
-    const [upLeft, upRight, downLeft, downRight] = Viewport.bounds.map(bound =>
-      bound.worldPointAtZ(0)
-    );
+    const upLeft = new Raycast(new Vector2(0, 0));
+    const upRight = new Raycast(new Vector2(w, 0));
+    const downRight = new Raycast(new Vector2(w, h));
 
     upLeft.x = Math.floor(upLeft.x) - Engine.observerPoint.x;
     upLeft.y = Math.floor(upLeft.y) - Engine.observerPoint.y;
@@ -130,3 +136,5 @@ window.DebugGrid = (function() {
 
   return { addGrid, removeGrid };
 })();
+
+module.exports = DebugGrid;

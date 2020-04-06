@@ -91,7 +91,6 @@ Vector2.prototype = {
     return this;
   }
 };
-
 Vector2.negative = function(a, b) {
   b.x = -a.x;
   b.y = -a.y;
@@ -187,3 +186,5 @@ Vector2.fromArray = function(a) {
 Vector2.angleBetween = function(a, b) {
   return a.angleTo(b);
 };
+
+module.exports = Vector2;

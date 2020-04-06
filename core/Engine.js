@@ -1,4 +1,10 @@
-window.Viewport = (function() {
+const PIXI = require('pixi.js');
+const d3 = require('d3');
+
+const Vector3 = require('./Vector3');
+const Vector2 = require('./Vector2');
+
+const Viewport = (function() {
   // Unit of the world correspond to TOT px of the canvas viewport at zoomLevel 1
   const baseUnit = Vector3(80, 40, 40);
 
@@ -11,9 +17,6 @@ window.Viewport = (function() {
   // The observing point of the world that correspondes to the center of canvas
   // It will be setted on canvas' resize
   const origin = Vector2();
-
-  // Bounds of rendering on the viewport
-  const bounds = [];
 
   // How much after last zoom event for calling zoom-end ?
   const zoomEndTimeoutMilliseconds = 500;
@@ -88,7 +91,6 @@ window.Viewport = (function() {
     unit,
     size,
     origin,
-    bounds,
     setZoom,
     getZoom,
     zoomLimits,
@@ -98,7 +100,7 @@ window.Viewport = (function() {
   };
 })();
 
-window.Engine = (function() {
+const Engine = (function() {
   let debug = false;
 
   /**
@@ -216,18 +218,6 @@ window.Engine = (function() {
 
     Viewport.origin.x = w / 2;
     Viewport.origin.y = h / 2;
-
-    // up left
-    Viewport.bounds[0] = new Raycast(new Vector2(0, 0));
-
-    // up right
-    Viewport.bounds[1] = new Raycast(new Vector2(w, 0));
-
-    // down left
-    Viewport.bounds[2] = new Raycast(new Vector2(0, h));
-
-    // down rights
-    Viewport.bounds[3] = new Raycast(new Vector2(w, h));
   }
 
   /**
@@ -270,12 +260,9 @@ window.Engine = (function() {
         };
       }
 
-      console.log(clientX - getPosition(element).x, clientY - getPosition(element).y);
-      console.log(
-        new Raycast(
-          new Vector2(clientX - getPosition(element).x, clientY - getPosition(element).y)
-        ).worldPointAtZ(0)
-      );
+      // new Raycast(
+      //   new Vector2(clientX - getPosition(element).x, clientY - getPosition(element).y)
+      // ).worldPointAtZ(0);
     });
 
     /**
@@ -370,3 +357,5 @@ window.Engine = (function() {
     removeActorObject
   };
 })();
+
+module.exports = { Engine, Viewport };

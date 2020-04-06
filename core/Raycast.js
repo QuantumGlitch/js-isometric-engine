@@ -1,9 +1,12 @@
+const { Engine, Viewport } = require('./Engine');
+const Vector3 = require('./Vector3');
+
 /**
  * @class Raycast
  * This class handles ray started from viewport
  * Each point on the viewport is a rect in the engine's world that can match a series of points
  */
-window.Raycast = class Raycast {
+class Raycast {
   /**
    * @param {Vector2} viewportPoint Position on the viewport
    */
@@ -27,4 +30,6 @@ window.Raycast = class Raycast {
       z + Engine.observerPoint.z
     );
   }
-};
+}
+
+module.exports = Raycast;
