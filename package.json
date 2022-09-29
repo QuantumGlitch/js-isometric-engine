@@ -17,7 +17,7 @@
   },
   "homepage": "https://github.com/QuantumGlitch/js-isometric-engine#readme",
   "dependencies": {
-    "d3": "^5.15.1",
+    "d3": "^7.6.1",
     "pixi.js": "^5.2.1"
   }
 }
